@@ -31,9 +31,7 @@ from pypot.primitive.move import MovePlayer
 
 class PoppyEnv(gym.Env):
 
-    def __init__(self,
-                 goals=2,
-                 terminates=True):
+    def __init__(self, goals=2, terminates=True):
        
         print("Hello, I am Poppy!")
         
@@ -42,10 +40,13 @@ class PoppyEnv(gym.Env):
         self.poppy = PoppyTorso(simulator='vrep')
         
         self.n_goals = goals
+        self.current_step =0
+        self.num_steps = 0
+        self.target_loaded = False
       
         self.terminates = terminates
 
-        self.goals_done = 0
+        self.done = False
         self.is_initialized = False
       
         self.goal = None
@@ -55,11 +56,10 @@ class PoppyEnv(gym.Env):
         self.episodes = 0  # used for resetting the sim every so often
         self.restart_every_n_episodes = 1000
         
-        # observation = 6 joints + 6 velocities + 3 coordinates for target
-        self.observation_space_l = spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32)  #
+      
+        self.observation_space = spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32)  #
         
-        # action = 6 joint angles
-        self.action_space_l = spaces.Box(low=0, high=180, shape=(7,), dtype=np.float32)  #
+        self.action_space = spaces.Box(low=-180, high=180, shape=(14,), dtype=np.float32)  #
 
         super().__init__()
         
@@ -69,31 +69,43 @@ class PoppyEnv(gym.Env):
         return [np.random.seed(seed)]
     
 
-    def one_step(self, action_l, action_r):
+    def step(self, action):
         
-        
-        
+        action_l = action[0:7]
+        action_r = action[7::]
         
         for k,m in enumerate(self.poppy.l_arm_chain.motors):
             if (m.name != 'abs_z') and (m.name != 'bust_y') and (m.name != 'bust_x'):   
-                        m.goto_position(action_l[k],5)
-                        print(m)
+                        m.goto_position(action_l[k], 1, wait= True)
+                        
             else:
-                        m.goto_position(0.0,5)
+                        m.goto_position(0.0, 1, wait= True)
                     
                     
         for k,m in enumerate(self.poppy.r_arm_chain.motors):
             if (m.name != 'abs_z') and (m.name != 'bust_y') and (m.name != 'bust_x'):   
-                        m.goto_position(action_r[k],5)
-                        print(m)
+                        m.goto_position(action_r[k], 1, wait= True)
+                       
             else:
-                        m.goto_position(0.0,5)             
+                        m.goto_position(0.0, 1, wait= True)             
                     
                     
         
-        obs = self.get_obs()      
+        obs = self.get_obs() 
+        
+        reward = -np.linalg.norm(obs - np.array(self.targets[self.current_step].flatten()))
+        print("current step : ", self.current_step)
+        print("reward : ", reward)
+        self.current_step += 1
+        
+        
+        
+        self.done = (self.current_step ==self.num_steps)
+        
+        
+        info={}
 
-        return obs
+        return np.float32(obs), reward, self.done,info
     
     def reset(self):
         joint_pos = { 'l_elbow_y':0.0,
@@ -110,15 +122,200 @@ class PoppyEnv(gym.Env):
                      'l_shoulder_x': 0.0,
                      'l_shoulder_y': 0.0
                     }
+        
         for m in self.poppy.motors:
-               m.goto_position(joint_pos[m.name],5)
+               m.goto_position(joint_pos[m.name], 1, wait= True)
+        
+        
+        self.current_step =0
+        self.done = False
+        
+        if self.target_loaded == False :
+            self.get_target()
+            self.target_loaded =True
+            
+        self.num_steps = self.targets.shape[0]
+        obs = np.r_[self.poppy.l_arm_chain.position, self.poppy.r_arm_chain.position]
+        
+        return np.float32(obs)
+    
+    
+    
                 
-    def get_obs(self):
-       
-        return self.poppy.l_arm_chain.position, self.poppy.r_arm_chain.position
+    def get_obs(self):        
+        return np.r_[self.poppy.l_arm_chain.position, self.poppy.r_arm_chain.position]
 
     
-    def get_state(self):
+    def get_state(self):        
+        return self.poppy.l_arm_chain.joints_position, self.poppy.r_arm_chain.joints_position
+    
+    def get_reward(self):
+        return 0
+    
+       
+    def moving_average(self,a, n=3) :
+        repeat_shape = list(a.shape)
+        repeat_shape[1:] = [1 for _ in range(len(repeat_shape)-1)]
+        repeat_shape[0] = n//2
+        a = torch.cat([a[:1].repeat(*repeat_shape), a, a[-2:].repeat(*repeat_shape)])
+        ret = torch.cumsum(a, axis=0)
+        ret[n:] = ret[n:] - ret[:-n]
+        return ret[n - 1:] / n
+    
+    def interpolate_targets(self,targets, factor=1):
+    
+        length, joints, _ = targets.shape
+        new_targets = torch.zeros((length-1) * factor + 1, joints, 3)
+        for i in range(new_targets.shape[0]):
+
+            target_id = float(i/factor)
+            before_id = int(np.floor(target_id))
+            after_id = int(np.floor(target_id + 1))
+
+            before_coef = 1 - (target_id - before_id)
+            after_coef = 1 - (after_id - target_id)
+
+            if after_id > length - 1:
+                after_id = length - 1
+
+            new_targets[i] = before_coef * targets[before_id] + after_coef * targets[after_id]
+
+        return new_targets
+    
+    
+    def get_target(self):
         
-        return self.poppy.l_arm_chain.joints_position, self.poppy.r_arm_chain.joints_position    
+        self.skeletons = blazepose_skeletons('mai1.mov')        
+        self.topology = [0, 0, 1, 2, 0, 4, 5, 0, 7, 8, 9, 8, 11, 12, 8, 14, 15]        
+        self.poppy_lengths = torch.Tensor([
+                            0.0,
+                            0.07,
+                            0.18,
+                            0.19,
+                            0.07,
+                            0.18,
+                            0.19,
+                            0.12,
+                            0.08,
+                            0.07,
+                            0.05,
+                            0.1, 
+                            0.15,
+                            0.13,
+                            0.1,
+                            0.15,
+                            0.13
+                            ])
+        
+        targets, all_positions = self.targets_from_skeleton(self.skeletons, self.topology,self.poppy_lengths)
+        
+        interpolated_targets = self.interpolate_targets(targets)
+        
+        smoothed_targets = self.moving_average(interpolated_targets, n=15)
+        
+        self.targets = smoothed_targets
+        
+        
+        
+    def targets_from_skeleton(self, source_positions, topology, poppy_lengths):
+        # Works in batched
+        batch_size, n_joints, _ = source_positions.shape
+
+        # Measure skeleton bone lengths
+        source_lengths = torch.Tensor(batch_size, n_joints)
+        for child, parent in enumerate(topology):
+            source_lengths[:, child] = torch.sqrt(
+                torch.sum(
+                    (source_positions[:, child] - source_positions[:, parent])**2,
+                    axis=-1
+                )
+            )
+
+        # Find the corresponding angles
+        source_offsets = torch.zeros(batch_size, n_joints, 3)
+        source_offsets[:, :, -1] = source_lengths
+        quaternions = find_quaternions(topology, source_offsets, source_positions)
+
+        # Re-orient according to the pelvis->chest orientation
+        base_orientation = quaternions[:, 7:8].repeat(1, n_joints, 1).reshape(batch_size*n_joints, 4)
+        base_orientation += 1e-3 * torch.randn_like(base_orientation)
+        quaternions = quaternions.reshape(batch_size*n_joints, 4)
+        quaternions = batch_quat_left_multiply(
+            batch_quat_inverse(base_orientation),
+            quaternions
+        )
+        quaternions = quaternions.reshape(batch_size, n_joints, 4)
+
+        # Use these quaternions in the forward kinematics with the Poppy skeleton
+        target_offsets = torch.zeros(batch_size, n_joints, 3)
+        target_offsets[:, :, -1] = poppy_lengths.unsqueeze(0).repeat(batch_size, 1)
+        target_positions = forward_kinematics(
+            topology,
+            torch.zeros(batch_size, 3),
+            target_offsets,
+            quaternions
+        )[0]
+
+        # Measure the hip orientation
+        alpha = np.arctan2(
+            target_positions[0, 1, 1] - target_positions[0, 0, 1],
+            target_positions[0, 1, 0] - target_positions[0, 0, 0]
+        )
+
+        # Rotate by alpha around z
+        alpha = alpha
+        rotation = torch.Tensor([np.cos(alpha/2), 0, 0, np.sin(alpha/2)]).unsqueeze(0).repeat(batch_size*n_joints, 1)
+        quaternions = quaternions.reshape(batch_size*n_joints, 4)
+        quaternions = batch_quat_left_multiply(
+            batch_quat_inverse(rotation),
+            quaternions
+        )
+        quaternions = quaternions.reshape(batch_size, n_joints, 4)
+
+        # Use these quaternions in the forward kinematics with the Poppy skeleton
+        target_positions = forward_kinematics(
+            topology,
+            torch.zeros(batch_size, 3),
+            target_offsets,
+            quaternions
+        )[0]
+
+
+
+        # Return only target positions for the end-effector of the 6 kinematic chains:
+        # Chest, head, left hand, left elbow, left shoulder, right hand, right elbow
+        # end_effector_indices = [8, 10, 13, 12, 11, 16, 15]
+        end_effector_indices = [13, 16]
+        # end_effector_indices = [13, 12, 16, 15]
+
+        return target_positions[:, end_effector_indices], target_positions  
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
     
