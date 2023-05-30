@@ -43,7 +43,8 @@ class PoppyEnv(gym.Env):
         self.current_step =0
         self.num_steps = 0
         self.target_loaded = False
-      
+        self.infos = []
+
         #self.terminates = terminates
 
         self.done = False
@@ -96,6 +97,8 @@ class PoppyEnv(gym.Env):
         reward = -np.linalg.norm(obs - np.array(self.targets[self.current_step].flatten()))
         print("current step : ", self.current_step)
         print("reward : ", reward)
+        info={'episode':self.episodes, 'step':self.current_step, 'reward':reward}
+        self.infos.append(info)
         self.current_step += 1
         
         
