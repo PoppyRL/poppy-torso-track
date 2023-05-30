@@ -39,19 +39,19 @@ class PoppyEnv(gym.Env):
         vrep.close_all_connections()
         self.poppy = PoppyTorso(simulator='vrep')
         
-        self.n_goals = goals
+        #self.n_goals = goals
         self.current_step =0
         self.num_steps = 0
         self.target_loaded = False
       
-        self.terminates = terminates
+        #self.terminates = terminates
 
         self.done = False
-        self.is_initialized = False
+        #self.is_initialized = False
       
-        self.goal = None
-        self.goal_positions = []
-        self.goal_distances = []
+        #self.goal = None
+        #self.goal_positions = []
+        #self.goal_distances = []
         
         self.episodes = 0  # used for resetting the sim every so often
         self.restart_every_n_episodes = 1000
@@ -102,6 +102,11 @@ class PoppyEnv(gym.Env):
         
         self.done = (self.current_step ==self.num_steps)
         
+        if self.done:
+            self.episodes += 1
+        
+        print("episode : ", self.episodes)
+            
         
         info={}
 
@@ -146,11 +151,11 @@ class PoppyEnv(gym.Env):
         return np.r_[self.poppy.l_arm_chain.position, self.poppy.r_arm_chain.position]
 
     
-    def get_state(self):        
-        return self.poppy.l_arm_chain.joints_position, self.poppy.r_arm_chain.joints_position
+#     def get_state(self):        
+#         return self.poppy.l_arm_chain.joints_position, self.poppy.r_arm_chain.joints_position
     
-    def get_reward(self):
-        return 0
+#     def get_reward(self):
+#         return 0
     
        
     def moving_average(self,a, n=3) :
