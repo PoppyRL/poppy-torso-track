@@ -192,8 +192,7 @@ class PoppyEnv(gym.Env):
     
     
     def get_target(self):
-        
-        self.skeletons = blazepose_skeletons('mai1.mov')        
+        self.skeletons = torch.load(f = "mai1.pt") # located in the poppy-torso-track dir       
         self.topology = [0, 0, 1, 2, 0, 4, 5, 0, 7, 8, 9, 8, 11, 12, 8, 14, 15]        
         self.poppy_lengths = torch.Tensor([
                             0.0,
