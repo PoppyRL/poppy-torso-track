@@ -66,7 +66,10 @@ class PoppyEnv(gym.Env):
       
         self.observation_space = spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32)  #
         
-        self.action_space = spaces.Box(low=-180, high=180, shape=(14,), dtype=np.float32)  #
+        self.action_space = spaces.Box(low=np.array([0,-180]), high=np.array([180,0]), shape=(2,), dtype=np.float32)  #
+        
+        
+        #self.action_space = tuple((spaces.Box(0.0, 180.0, (1,)), spaces.Box(-180.0, 0.0, (1,))))
 
         super().__init__()
         
@@ -78,37 +81,68 @@ class PoppyEnv(gym.Env):
 
     def step(self, action):
         
-        action_l = action[0:7]
-        action_r = action[7::]
+        action_l = action[0]
+        action_r = action[1]
         
-        for k,m in enumerate(self.poppy.l_arm_chain.motors):
-            if (m.name != 'abs_z') and (m.name != 'bust_y') and (m.name != 'bust_x'):   
-                        m.goto_position(action_l[k], 1, wait= True)
+        if self.current_step > 125 :  
                         
-            else:
-                        m.goto_position(0.0, 1, wait= True)
+            for k,m in enumerate(self.poppy.r_arm_chain.motors):
+                            
+                            if (m.name != 'r_elbow_y'):   
+                                   m.goto_position(0.0, 1, wait= True)
+                            else:
+                                   m.goto_position(90.0,1, wait=True)
+                                
+            for k,m in enumerate(self.poppy.l_arm_chain.motors):
+                if (m.name == 'l_shoulder_x') :   
+                            m.goto_position(action_l, 1, wait= True)
+                            
+                elif (m.name == 'l_elbow_y') :
+                            m.goto_position(90.0, 1, wait= True)
+                else: 
+                            m.goto_position(0.0, 1, wait= True)                
+
+        else:     
+            for k,m in enumerate(self.poppy.r_arm_chain.motors):
+                if (m.name == 'r_shoulder_x') :   
+                            m.goto_position(action_r, 1, wait= True)
+                            
+                elif (m.name == 'r_elbow_y') :
+                            m.goto_position(90.0, 1, wait= True)
+                else: 
+                            m.goto_position(0.0, 1, wait= True)     
                     
-                    
-        for k,m in enumerate(self.poppy.r_arm_chain.motors):
-            if (m.name != 'abs_z') and (m.name != 'bust_y') and (m.name != 'bust_x'):   
-                        m.goto_position(action_r[k], 1, wait= True)
-                       
-            else:
-                        m.goto_position(0.0, 1, wait= True)             
-                    
-                    
+            for k,m in enumerate(self.poppy.l_arm_chain.motors):
+                            
+                            if (m.name != 'l_elbow_y'):   
+                                   m.goto_position(0.0, 1, wait= True)
+                            else:
+                                   m.goto_position(90.0,1, wait=True)
+            
+            
+            
+            
+            
         
         obs = self.get_obs() 
         
-        dis = np.linalg.norm(obs - np.array(self.targets[self.current_step].flatten()))
+        if self.current_step <=125 :        
+             dis = np.linalg.norm(obs[3:] - np.array(self.targets[self.current_step].flatten())[3:])
+        else:
+             dis = np.linalg.norm(obs[0:3] - np.array(self.targets[self.current_step].flatten())[0:3])       
         
         
         
-        if dis <=0.1:
-            reward = np.exp(-dis)
-            self.current_step += 1
+       
+        #reward = np.exp(-1*dis)
+        
+        if dis <=0.3: # 0.2
+            reward = np.exp(-5*dis)
+            
         else:
             reward = 0
+            
+        self.current_step += 5
             
         print("reward : ", reward)
         print("current step : ", self.current_step)
@@ -120,7 +154,7 @@ class PoppyEnv(gym.Env):
         
         
         
-        self.done = (self.current_step ==self.num_steps)
+        self.done = (self.current_step >=self.num_steps)
         
         if self.done:
             self.episodes += 1
