@@ -1,20 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
-
-
 import time
 import gym
 import numpy as np
 from gym import spaces
 from tqdm import tqdm
-
-
-
-# In[2]:
-
-
 import numpy as np
 from utils.skeleton import *
 from utils.quaternion import *
@@ -60,7 +51,7 @@ class PoppyEnv(gym.Env):
       
         self.observation_space = spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32)  #
         
-        self.action_space = spaces.Box(low=-150, high=150, shape=(14,), dtype=np.float32)  #
+        self.action_space = spaces.Box(low=0, high=180, shape=(2,), dtype=np.float32)  #
 
         super().__init__()
         
@@ -79,36 +70,44 @@ class PoppyEnv(gym.Env):
         print(state)
         '''
 
-        action_l = action[0:7]
-        action_r = action[7::]
+        print(f"action: {action}")
+        action_l = action[0]
+        action_r = action[1]
         
         for k,m in enumerate(self.poppy.l_arm_chain.motors):
-            if (m.name != 'abs_z') and (m.name != 'bust_y') and (m.name != 'bust_x'):   
-                        m.goto_position(action_l[k], 0.01, wait= True)
-                        
+
+            if m.name == 'l_shoulder_x':   
+                m.goto_position(action_l, 0.01, wait= True)
+            elif m.name == 'l_elbow_y':
+                m.goto_position(90.0, 0.01, wait= True)
             else:
-                        m.goto_position(0.0, 0.01, wait= True)
-                    
+                m.goto_position(0.0, 0.01, wait= True)
                     
         for k,m in enumerate(self.poppy.r_arm_chain.motors):
-            if (m.name != 'abs_z') and (m.name != 'bust_y') and (m.name != 'bust_x'):   
-                        m.goto_position(action_r[k], 0.01, wait= True)
-                       
+            if m.name == 'r_shoulder_x':   
+                m.goto_position(-action_r, 0.01, wait= True) # opposite of left !
+            elif m.name == 'r_elbow_y':
+                m.goto_position(90.0, 0.01, wait= True)
             else:
-                        m.goto_position(0.0, 0.01, wait= True)             
+                m.goto_position(0.0, 0.01, wait= True)             
                     
                     
         
         obs = self.get_obs() 
         
-        reward = -np.linalg.norm(obs - np.array(self.targets[self.current_step].flatten()))
+        dis = np.linalg.norm(obs - np.array(self.targets[self.current_step].flatten()))
+        
+        if dis <=0.1:
+            reward = np.exp(-dis)
+            self.current_step += 1
+        else:
+            reward = 0
+
         print("current step : ", self.current_step)
         print("reward : ", reward)
         info={'episode':self.episodes, 'step':self.current_step, 'reward':reward}
         self.infos.append(info)
         self.current_step += 1
-        
-        
         
         self.done = (self.current_step ==self.num_steps)
         
@@ -117,19 +116,18 @@ class PoppyEnv(gym.Env):
         
         print("episode : ", self.episodes)
             
-        
         info={}
 
         return np.float32(obs), reward, self.done,info
     
     def reset(self):
-        joint_pos = { 'l_elbow_y':0.0,
+        joint_pos = { 'l_elbow_y':90.0,
                      'head_y': 0.0,
                      'r_arm_z': 0.0, 
                      'head_z': 0.0,
                      'r_shoulder_x': 0.0, 
                      'r_shoulder_y': 0.0,
-                     'r_elbow_y': 0.0, 
+                     'r_elbow_y': 90.0, 
                      'l_arm_z': 0.0,
                      'abs_z': 0.0,
                      'bust_y': 0.0, 
