@@ -60,7 +60,7 @@ class PoppyEnv(gym.Env):
       
         self.observation_space = spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32)  #
         
-        self.action_space = spaces.Box(low=-180, high=180, shape=(14,), dtype=np.float32)  #
+        self.action_space = spaces.Box(low=-150, high=150, shape=(14,), dtype=np.float32)  #
 
         super().__init__()
         
@@ -72,23 +72,30 @@ class PoppyEnv(gym.Env):
 
     def step(self, action):
         
+        '''
+        obs = self.get_obs() 
+        print(obs)
+        state = self.get_state()
+        print(state)
+        '''
+
         action_l = action[0:7]
         action_r = action[7::]
         
         for k,m in enumerate(self.poppy.l_arm_chain.motors):
             if (m.name != 'abs_z') and (m.name != 'bust_y') and (m.name != 'bust_x'):   
-                        m.goto_position(action_l[k], 1, wait= True)
+                        m.goto_position(action_l[k], 0.01, wait= True)
                         
             else:
-                        m.goto_position(0.0, 1, wait= True)
+                        m.goto_position(0.0, 0.01, wait= True)
                     
                     
         for k,m in enumerate(self.poppy.r_arm_chain.motors):
             if (m.name != 'abs_z') and (m.name != 'bust_y') and (m.name != 'bust_x'):   
-                        m.goto_position(action_r[k], 1, wait= True)
+                        m.goto_position(action_r[k], 0.01, wait= True)
                        
             else:
-                        m.goto_position(0.0, 1, wait= True)             
+                        m.goto_position(0.0, 0.01, wait= True)             
                     
                     
         
@@ -132,7 +139,7 @@ class PoppyEnv(gym.Env):
                     }
         
         for m in self.poppy.motors:
-               m.goto_position(joint_pos[m.name], 1, wait= True)
+               m.goto_position(joint_pos[m.name], 0.01, wait= True)
         
         
         self.current_step =0
@@ -154,8 +161,8 @@ class PoppyEnv(gym.Env):
         return np.r_[self.poppy.l_arm_chain.position, self.poppy.r_arm_chain.position]
 
     
-#     def get_state(self):        
-#         return self.poppy.l_arm_chain.joints_position, self.poppy.r_arm_chain.joints_position
+    def get_state(self):        
+        return self.poppy.l_arm_chain.joints_position, self.poppy.r_arm_chain.joints_position
     
 #     def get_reward(self):
 #         return 0
