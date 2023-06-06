@@ -134,10 +134,10 @@ class PoppyEnv(gym.Env):
         
         
        
-        #reward = np.exp(-1*dis)
+        # reward = np.exp(-10*dis)
         
         if dis <=0.3: # 0.2
-            reward = np.exp(-5*dis)
+            reward = np.exp(-10*dis)
             
         else:
             reward = 0
@@ -167,13 +167,13 @@ class PoppyEnv(gym.Env):
         return np.float32(obs), reward, self.done,info
     
     def reset(self):
-        joint_pos = { 'l_elbow_y':0.0,
+        joint_pos = { 'l_elbow_y':90.0,
                      'head_y': 0.0,
                      'r_arm_z': 0.0, 
                      'head_z': 0.0,
                      'r_shoulder_x': 0.0, 
                      'r_shoulder_y': 0.0,
-                     'r_elbow_y': 0.0, 
+                     'r_elbow_y': 90.0, 
                      'l_arm_z': 0.0,
                      'abs_z': 0.0,
                      'bust_y': 0.0, 
