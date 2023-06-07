@@ -24,7 +24,7 @@ class PoppyEnv(gym.Env):
 
     def __init__(self, goals=2, terminates=True):
        
-        print("Hello, I am Poppy!")
+        #print("Hello, I am Poppy!")
         
         from pypot import vrep
         vrep.close_all_connections()
@@ -62,15 +62,15 @@ class PoppyEnv(gym.Env):
     
 
     def step(self, action):
-        
-        '''
+
+        '''        
         obs = self.get_obs() 
         print(obs)
         state = self.get_state()
         print(state)
         '''
 
-        print(f"action: {action}")
+        #print(f"action: {action}")
         action_l = action[0]
         action_r = action[1]
         
@@ -95,26 +95,24 @@ class PoppyEnv(gym.Env):
         
         obs = self.get_obs() 
         
-        dis = np.linalg.norm(obs - np.array(self.targets[self.current_step].flatten()))
-        
-        if dis <=0.1:
-            reward = np.exp(-dis)
-            self.current_step += 1
-        else:
-            reward = 0
+        dis = np.linalg.norm(obs - np.array(self.targets[self.current_step - 1].flatten())) 
+    
+        reward = np.exp(-5*dis)
+        self.current_step += 1
 
-        print("current step : ", self.current_step)
-        print("reward : ", reward)
+        #print("current step : ", self.current_step)
+        #print("reward : ", reward)
         info={'episode':self.episodes, 'step':self.current_step, 'reward':reward}
         self.infos.append(info)
         self.current_step += 1
         
-        self.done = (self.current_step ==self.num_steps)
+        self.done = (self.current_step==self.num_steps)
         
         if self.done:
             self.episodes += 1
+            self.current_step = 0
         
-        print("episode : ", self.episodes)
+        #print("episode : ", self.episodes)
             
         info={}
 
@@ -197,7 +195,12 @@ class PoppyEnv(gym.Env):
     
     
     def get_target(self):
-        self.skeletons = torch.load(f = "mai1.pt") # located in the poppy-torso-track dir       
+        self.skeletons = torch.load(f = "mai1.pt") # located in the poppy-torso-track dir   
+        # sample only a fraction of the skeletons
+        idx = np.arange(0, len(self.skeletons), 25)
+        print(f"len idx : {len(idx)}, len skeletons: {len(self.skeletons)}, idx {idx}]")
+        self.skeletons = self.skeletons[idx]
+
         self.topology = [0, 0, 1, 2, 0, 4, 5, 0, 7, 8, 9, 8, 11, 12, 8, 14, 15]        
         self.poppy_lengths = torch.Tensor([
                             0.0,
@@ -226,6 +229,7 @@ class PoppyEnv(gym.Env):
         smoothed_targets = self.moving_average(interpolated_targets, n=15)
         
         self.targets = smoothed_targets
+        self.all_positions = all_positions
         
         
         
